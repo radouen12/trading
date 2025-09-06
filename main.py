@@ -62,17 +62,19 @@ def setup_directories():
     print("✅ Directory structure ready")
 
 def run_dashboard():
-    """Launch the Streamlit dashboard"""
-    dashboard_path = current_dir / "ui" / "dashboard.py"
+    """Launch the Enhanced Streamlit dashboard"""
+    dashboard_path = current_dir / "ui" / "enhanced_dashboard.py"
     
     if not dashboard_path.exists():
-        print("❌ Dashboard file not found!")
+        print("❌ Enhanced dashboard file not found!")
         return False
     
-    print("🚀 Launching Real-Time Trading Dashboard...")
+    print("🚀 Launching Enhanced Real-Time Trading Dashboard...")
+    print("🧠 Phase 2 Features: Technical Analysis + Seasonal Intelligence + News Sentiment + Correlation Analysis")
     print("📡 Dashboard will open in your browser")
     print("🔄 Data updates every 60 seconds")
     print("⚡ Analysis runs every 10 minutes")
+    print("🎯 Enhanced AI-powered suggestions")
     print("\n" + "="*50)
     
     try:
@@ -90,7 +92,7 @@ def run_dashboard():
 
 def main():
     """Main application launcher"""
-    print("🚀 Real-Time Trading System - Phase 1")
+    print("🚀 Real-Time Trading System - Phase 2 COMPLETE")
     print("="*50)
     
     # Check system requirements
@@ -113,22 +115,33 @@ def main():
     print(f"   - {len(config.CRYPTO_SYMBOLS)} Crypto pairs")
     print(f"   - {len(config.FOREX_SYMBOLS)} Forex pairs")
     
-    print("\n⚡ Features Available:")
+    print("\n⚡ Phase 2 Features (COMPLETED):")
+    print("✅ Advanced Technical Analysis (RSI, MACD, Bollinger Bands)")
+    print("✅ Seasonal Pattern Intelligence")
+    print("✅ News Sentiment Analysis")
+    print("✅ Correlation Matrix & Risk Analysis")
+    print("✅ Enhanced AI Suggestion Engine")
+    print("✅ Multi-factor Confidence Scoring")
+    print("✅ Support/Resistance Detection")
+    print("✅ Market Regime Analysis")
+    print("✅ Sector Rotation Signals")
+    
+    print("\n🔄 Auto-Features:")
     print("✅ Real-time price data")
     print("✅ Capital-based position sizing")
     print("✅ Multi-timeframe suggestions")
-    print("✅ Risk management")
-    print("✅ Portfolio tracking")
-    print("🔄 Auto-refreshing dashboard")
+    print("✅ Advanced risk management")
+    print("✅ Portfolio correlation tracking")
+    print("🔄 Auto-refreshing enhanced dashboard")
     
-    print("\n🔮 Coming in Phase 2:")
-    print("🔜 Advanced technical analysis")
-    print("🔜 Seasonal pattern detection")
-    print("🔜 News sentiment analysis")
-    print("🔜 Enhanced risk management")
+    print("\n🔮 Coming in Phase 3:")
+    print("🔜 Backtesting engine")
+    print("🔜 Performance analytics")
+    print("🔜 Alert systems (Email/SMS)")
+    print("🔜 Advanced risk metrics")
     
-    # Launch dashboard
-    input("\n📡 Press Enter to launch dashboard...")
+    # Launch enhanced dashboard
+    input("\n📡 Press Enter to launch ENHANCED dashboard...")
     run_dashboard()
 
 if __name__ == "__main__":
