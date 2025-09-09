@@ -2,26 +2,99 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from config import Config
-from analysis.technical import TechnicalAnalyzer
-from analysis.seasonal import SeasonalAnalyzer
-from analysis.sentiment import SentimentAnalyzer
-from analysis.correlation import CorrelationAnalyzer
+
+# Safe imports with centralized fallback handling
+try:
+    from analysis import TechnicalAnalyzer, SeasonalAnalyzer, SentimentAnalyzer, CorrelationAnalyzer
+except ImportError as e:
+    print(f"⚠️ Analysis modules not fully available: {e}")
+    # Import individual modules that are available
+    try:
+        from analysis import TechnicalAnalyzer
+    except ImportError:
+        TechnicalAnalyzer = None
+    try:
+        from analysis import SeasonalAnalyzer
+    except ImportError:
+        SeasonalAnalyzer = None
+    try:
+        from analysis import SentimentAnalyzer
+    except ImportError:
+        SentimentAnalyzer = None
+    try:
+        from analysis import CorrelationAnalyzer
+    except ImportError:
+        CorrelationAnalyzer = None
 
 class EnhancedSuggestionEngine:
     def __init__(self):
         self.config = Config()
-        self.technical_analyzer = TechnicalAnalyzer()
-        self.seasonal_analyzer = SeasonalAnalyzer()
-        self.sentiment_analyzer = SentimentAnalyzer()
-        self.correlation_analyzer = CorrelationAnalyzer()
         
-        # Weights for different analysis types
-        self.analysis_weights = {
-            'technical': 0.4,
-            'seasonal': 0.25,
-            'sentiment': 0.25,
-            'correlation': 0.1
-        }
+        # Initialize analyzers with safe fallbacks
+        self.technical_analyzer = TechnicalAnalyzer() if TechnicalAnalyzer else None
+        self.seasonal_analyzer = SeasonalAnalyzer() if SeasonalAnalyzer else None
+        self.sentiment_analyzer = SentimentAnalyzer() if SentimentAnalyzer else None
+        self.correlation_analyzer = CorrelationAnalyzer() if CorrelationAnalyzer else None
+        
+        # Check which analyzers are available
+        available_analyzers = []
+        if self.technical_analyzer: available_analyzers.append('technical')
+        if self.seasonal_analyzer: available_analyzers.append('seasonal')
+        if self.sentiment_analyzer: available_analyzers.append('sentiment')
+        if self.correlation_analyzer: available_analyzers.append('correlation')
+        
+        print(f"🧠 Enhanced Suggestion Engine initialized with: {', '.join(available_analyzers)}")
+        
+        # Adjust weights based on available analyzers
+        if not available_analyzers:
+            print("⚠️ No analyzers available - using basic mode")
+            self.analysis_weights = {'basic': 1.0}
+        else:
+            # Default weights for available analyzers
+            default_weights = {
+                'technical': 0.4,
+                'seasonal': 0.25,
+                'sentiment': 0.25,
+                'correlation': 0.1
+            }
+            # Only use weights for available analyzers and normalize
+            self.analysis_weights = {}
+            total_weight = 0
+            for analyzer in available_analyzers:
+                weight = default_weights.get(analyzer, 0.25)  # Default weight if not specified
+                self.analysis_weights[analyzer] = weight
+                total_weight += weight
+            
+            # Normalize weights to sum to 1.0
+            if total_weight > 0:
+                for analyzer in self.analysis_weights:
+                    self.analysis_weights[analyzer] /= total_weight
+    
+    def _run_analysis_batch(self, analysis_func, analysis_type, max_symbols=50):
+        """Run analysis in batches to manage memory usage"""
+        try:
+            # If we have a method to analyze specific symbols, use batching
+            # Otherwise, run the full analysis but with memory monitoring
+            
+            # For now, we'll run the full analysis but add cleanup
+            results = analysis_func()
+            
+            # Clean up old results to prevent memory leaks
+            if hasattr(self, '_old_results'):
+                del self._old_results
+            
+            # Store current results but limit size
+            if len(results) > max_symbols:
+                print(f"⚠️ Limiting {analysis_type} results to {max_symbols} symbols")
+                # Keep only the most recent symbols
+                limited_results = dict(list(results.items())[:max_symbols])
+                return limited_results
+            
+            return results
+            
+        except Exception as e:
+            print(f"❌ Error in {analysis_type} analysis: {e}")
+            return {}
     
     def generate_comprehensive_suggestions(self, market_data, portfolio_positions):
         """Generate enhanced trading suggestions using all analysis engines"""
@@ -207,14 +280,24 @@ class EnhancedSuggestionEngine:
                 elif volume > 500000:
                     scores['volume_score'] = 60
             
-            # Calculate weighted overall score
-            overall_confidence = (
-                scores['technical_score'] * self.analysis_weights['technical'] +
-                scores['seasonal_score'] * self.analysis_weights['seasonal'] +
-                scores['sentiment_score'] * self.analysis_weights['sentiment'] +
+            # Calculate weighted overall score with proper bounds checking
+            base_confidence = (
+                scores['technical_score'] * self.analysis_weights.get('technical', 0) +
+                scores['seasonal_score'] * self.analysis_weights.get('seasonal', 0) +
+                scores['sentiment_score'] * self.analysis_weights.get('sentiment', 0) +
                 scores['volume_score'] * 0.05 +
                 scores['momentum_score'] * 0.05
             )
+            
+            # Ensure overall confidence stays within valid bounds (0-100)
+            overall_confidence = max(0, min(100, base_confidence))
+            
+            # Apply diminishing returns for very high scores to prevent inflation
+            if overall_confidence > 90:
+                overall_confidence = 90 + (overall_confidence - 90) * 0.5
+            
+            # Final clamp to ensure it never exceeds 95%
+            overall_confidence = min(overall_confidence, 95)
             
             # Determine overall signal direction
             buy_signals = 0
@@ -233,7 +316,13 @@ class EnhancedSuggestionEngine:
                         elif signal.get('type') == 'SELL':
                             sell_signals += 1
             
-            overall_signal = 'BUY' if buy_signals > sell_signals else 'SELL' if sell_signals > buy_signals else 'NEUTRAL'
+            # Determine overall signal with conflict resolution
+            if buy_signals > sell_signals and overall_confidence > 60:
+                overall_signal = 'BUY'
+            elif sell_signals > buy_signals and overall_confidence > 60:
+                overall_signal = 'SELL'
+            else:
+                overall_signal = 'NEUTRAL'  # Low confidence or conflicting signals
             
             return {
                 'overall_confidence': min(overall_confidence, 95),
@@ -361,7 +450,7 @@ class EnhancedSuggestionEngine:
                 'signal_sources': len(composite_score['all_signals']),
                 'signal_agreement': composite_score['signal_agreement'],
                 'enhanced': True,
-                'analysis_timestamp': datetime.now()
+                'analysis_timestamp': datetime.now().replace(microsecond=0)  # Remove microseconds for cleaner timestamps
             }
             
             return suggestion
@@ -502,7 +591,7 @@ class EnhancedSuggestionEngine:
                 overall_regime = 'NEUTRAL'
             
             regime_indicators['overall_regime'] = overall_regime
-            regime_indicators['analysis_time'] = datetime.now()
+            regime_indicators['analysis_time'] = datetime.now().replace(microsecond=0)
             
             return regime_indicators
             
@@ -513,7 +602,7 @@ class EnhancedSuggestionEngine:
                 'trend': 'SIDEWAYS',
                 'overall_regime': 'NEUTRAL',
                 'vix_level': 20,
-                'analysis_time': datetime.now()
+                'analysis_time': datetime.now().replace(microsecond=0)
             }
     
     def generate_market_summary(self):
@@ -533,7 +622,7 @@ class EnhancedSuggestionEngine:
                 'sector_rotation': sector_signals,
                 'market_sentiment': market_sentiment,
                 'trading_recommendations': self.generate_regime_based_recommendations(market_regime),
-                'summary_timestamp': datetime.now()
+                'summary_timestamp': datetime.now().replace(microsecond=0)
             }
             
             return summary

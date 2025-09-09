@@ -1,9 +1,54 @@
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-from textblob import TextBlob
 import re
 from config import Config
+import time
+from functools import wraps
+
+# Safe import of TextBlob with fallback
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    print("⚠️ TextBlob not available. Install with: pip install textblob")
+    TEXTBLOB_AVAILABLE = False
+    
+    # Fallback TextBlob class
+    class TextBlob:
+        def __init__(self, text):
+            self.text = text
+        
+        @property
+        def sentiment(self):
+            # Simple fallback sentiment (neutral)
+            class Sentiment:
+                polarity = 0.0
+                subjectivity = 0.5
+            return Sentiment()
+
+# Retry decorator for network requests
+def retry_request(max_retries=3, delay=1, backoff=2):
+    """Decorator to retry network requests with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except (requests.RequestException, requests.Timeout, ConnectionError) as e:
+                    retries += 1
+                    if retries == max_retries:
+                        print(f"❌ Failed after {max_retries} retries: {e}")
+                        raise
+                    
+                    wait_time = delay * (backoff ** (retries - 1))
+                    print(f"⚠️ Request failed, retrying in {wait_time}s... (attempt {retries}/{max_retries})")
+                    time.sleep(wait_time)
+            return None
+        return wrapper
+    return decorator
 
 class SentimentAnalyzer:
     def __init__(self):
@@ -13,19 +58,21 @@ class SentimentAnalyzer:
     def get_news_sentiment(self, symbol, days_back=3):
         """Get news sentiment for a symbol"""
         try:
-            # Use NewsAPI (requires free API key)
-            if hasattr(self.config, 'NEWS_API_KEY') and self.config.NEWS_API_KEY != "your_news_api_key_here":
+            # Use NewsAPI if properly configured
+            if self.config.is_news_api_available():
                 return self.get_newsapi_sentiment(symbol, days_back)
             else:
                 # Fallback to Yahoo Finance news scraping
+                print(f"⚠️ News API not configured, using Yahoo Finance fallback for {symbol}")
                 return self.get_yahoo_news_sentiment(symbol, days_back)
                 
         except Exception as e:
             print(f"❌ Error getting news sentiment for {symbol}: {e}")
             return self.get_default_sentiment()
     
+    @retry_request(max_retries=3, delay=2)
     def get_newsapi_sentiment(self, symbol, days_back=3):
-        """Get sentiment from NewsAPI"""
+        """Get sentiment from NewsAPI with retry logic"""
         try:
             # Convert symbol to company name for better search
             company_names = {
@@ -42,7 +89,7 @@ class SentimentAnalyzer:
             
             search_term = company_names.get(symbol, symbol.replace('-USD', '').replace('=X', ''))
             
-            # NewsAPI request
+            # NewsAPI request with extended timeout
             url = "https://newsapi.org/v2/everything"
             params = {
                 'q': search_term,
@@ -53,14 +100,34 @@ class SentimentAnalyzer:
                 'pageSize': 20
             }
             
-            response = requests.get(url, params=params, timeout=10)
+            # Add timeout and better error handling
+            response = requests.get(url, params=params, timeout=30, 
+                                  headers={'User-Agent': 'Trading-System/1.0'})
             
             if response.status_code == 200:
                 news_data = response.json()
-                articles = news_data.get('articles', [])
+                
+                # Validate response structure
+                if 'articles' not in news_data:
+                    print(f"⚠️ Unexpected NewsAPI response format for {symbol}")
+                    return self.get_yahoo_news_sentiment(symbol, days_back)
+                
+                articles = news_data['articles']
                 
                 if articles:
                     return self.analyze_articles_sentiment(articles, symbol)
+            elif response.status_code == 429:
+                print(f"⚠️ NewsAPI rate limit exceeded for {symbol}")
+                time.sleep(60)  # Wait before fallback
+                return self.get_yahoo_news_sentiment(symbol, days_back)
+            elif response.status_code == 401:
+                print(f"⚠️ NewsAPI authentication failed - check API key")
+                return self.get_yahoo_news_sentiment(symbol, days_back)
+            elif response.status_code == 400:
+                print(f"⚠️ NewsAPI bad request for {symbol} - check parameters")
+                return self.get_yahoo_news_sentiment(symbol, days_back)
+            else:
+                print(f"⚠️ NewsAPI error {response.status_code} for {symbol}")
             
             return self.get_default_sentiment()
             
@@ -68,29 +135,48 @@ class SentimentAnalyzer:
             print(f"❌ NewsAPI error for {symbol}: {e}")
             return self.get_default_sentiment()
     
+    @retry_request(max_retries=2, delay=1)
     def get_yahoo_news_sentiment(self, symbol, days_back=3):
-        """Fallback: Get sentiment from Yahoo Finance news"""
+        """Fallback: Get sentiment from Yahoo Finance news with retry logic"""
         try:
             import yfinance as yf
             
             ticker = yf.Ticker(symbol)
             
-            # Try to get news (this is unofficial and may not always work)
+            # Try to get news with timeout handling
             try:
+                # Set a shorter timeout for yfinance
                 news = ticker.news
-                if news:
+                if news and len(news) > 0:
                     # Convert Yahoo news format to our format
                     articles = []
                     for item in news[:10]:  # Limit to 10 articles
-                        articles.append({
-                            'title': item.get('title', ''),
-                            'description': item.get('summary', ''),
-                            'publishedAt': datetime.fromtimestamp(item.get('providerPublishTime', 0)).isoformat()
-                        })
+                        # Validate item structure
+                        if not isinstance(item, dict):
+                            continue
+                            
+                        title = item.get('title', '')
+                        summary = item.get('summary', '')
+                        timestamp = item.get('providerPublishTime', 0)
+                        
+                        if title:  # Only add if we have a title
+                            try:
+                                pub_date = datetime.fromtimestamp(timestamp).isoformat()
+                            except (ValueError, OSError):
+                                pub_date = datetime.now().isoformat()
+                                
+                            articles.append({
+                                'title': title,
+                                'description': summary,
+                                'publishedAt': pub_date
+                            })
                     
-                    return self.analyze_articles_sentiment(articles, symbol)
-            except:
-                pass
+                    if articles:
+                        return self.analyze_articles_sentiment(articles, symbol)
+                else:
+                    print(f"📰 No news found for {symbol} via Yahoo Finance")
+            except Exception as yf_error:
+                print(f"⚠️ Yahoo Finance error for {symbol}: {yf_error}")
             
             # If no news available, return neutral sentiment
             return self.get_neutral_sentiment()

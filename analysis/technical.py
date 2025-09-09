@@ -3,315 +3,319 @@ import numpy as np
 from datetime import datetime, timedelta
 import yfinance as yf
 from config import Config
+import time
+from functools import wraps
+
+# Retry decorator for network requests
+def retry_request(max_retries=3, delay=1, backoff=2):
+    """Decorator to retry network requests with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except (Exception,) as e:
+                    retries += 1
+                    if retries == max_retries:
+                        print(f"❌ Failed after {max_retries} retries: {e}")
+                        raise
+                    
+                    wait_time = delay * (backoff ** (retries - 1))
+                    print(f"⚠️ Request failed, retrying in {wait_time}s... (attempt {retries}/{max_retries})")
+                    time.sleep(wait_time)
+            return None
+        return wrapper
+    return decorator
 
 class TechnicalAnalyzer:
     def __init__(self):
         self.config = Config()
     
     def calculate_rsi(self, prices, period=14):
-        """Calculate Relative Strength Index"""
+        """Calculate Relative Strength Index with proper handling of edge cases"""
         try:
+            if not isinstance(prices, pd.Series):
+                prices = pd.Series(prices)
+                
+            if len(prices) < period + 1:
+                # Not enough data for RSI calculation
+                return pd.Series([50] * len(prices), index=prices.index)
+            
+            # Calculate price changes
             delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-            rs = gain / loss
+            
+            # Separate gains and losses
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            
+            # Calculate rolling averages
+            avg_gain = gain.rolling(window=period, min_periods=period).mean()
+            avg_loss = loss.rolling(window=period, min_periods=period).mean()
+            
+            # Handle division by zero with small epsilon
+            epsilon = 1e-10
+            avg_loss_safe = avg_loss.replace(0, epsilon)
+            
+            # Calculate RS and RSI
+            rs = avg_gain / avg_loss_safe
             rsi = 100 - (100 / (1 + rs))
-            return rsi.fillna(50)
-        except:
-            return pd.Series([50] * len(prices), index=prices.index)
+            
+            # Fill NaN values with neutral RSI (50)
+            rsi = rsi.fillna(50)
+            
+            # Ensure RSI is within valid range [0, 100]
+            rsi = rsi.clip(0, 100)
+            
+            return rsi
+            
+        except Exception as e:
+            print(f"❌ Error calculating RSI: {e}")
+            # Return neutral RSI series in case of error
+            if isinstance(prices, pd.Series):
+                return pd.Series([50] * len(prices), index=prices.index)
+            else:
+                return pd.Series([50])
     
     def calculate_macd(self, prices, fast=12, slow=26, signal=9):
-        """Calculate MACD (Moving Average Convergence Divergence)"""
+        """Calculate MACD (Moving Average Convergence Divergence) with validation"""
         try:
-            ema_fast = prices.ewm(span=fast).mean()
-            ema_slow = prices.ewm(span=slow).mean()
-            macd = ema_fast - ema_slow
-            signal_line = macd.ewm(span=signal).mean()
-            histogram = macd - signal_line
+            if not isinstance(prices, pd.Series):
+                prices = pd.Series(prices)
+                
+            if len(prices) < slow + signal:
+                # Not enough data for MACD calculation
+                return {
+                    'macd': pd.Series([0] * len(prices), index=prices.index),
+                    'signal': pd.Series([0] * len(prices), index=prices.index),
+                    'histogram': pd.Series([0] * len(prices), index=prices.index)
+                }
+            
+            # Calculate EMAs
+            ema_fast = prices.ewm(span=fast, min_periods=fast).mean()
+            ema_slow = prices.ewm(span=slow, min_periods=slow).mean()
+            
+            # Calculate MACD line
+            macd_line = ema_fast - ema_slow
+            
+            # Calculate signal line
+            signal_line = macd_line.ewm(span=signal, min_periods=signal).mean()
+            
+            # Calculate histogram
+            histogram = macd_line - signal_line
+            
+            # Fill NaN values with zeros
+            macd_line = macd_line.fillna(0)
+            signal_line = signal_line.fillna(0)
+            histogram = histogram.fillna(0)
             
             return {
-                'macd': macd.fillna(0),
-                'signal': signal_line.fillna(0),
-                'histogram': histogram.fillna(0)
+                'macd': macd_line,
+                'signal': signal_line,
+                'histogram': histogram
             }
-        except:
+            
+        except Exception as e:
+            print(f"❌ Error calculating MACD: {e}")
+            # Return zero series in case of error
+            zero_series = pd.Series([0] * len(prices), index=prices.index if isinstance(prices, pd.Series) else None)
             return {
-                'macd': pd.Series([0] * len(prices), index=prices.index),
-                'signal': pd.Series([0] * len(prices), index=prices.index),
-                'histogram': pd.Series([0] * len(prices), index=prices.index)
+                'macd': zero_series,
+                'signal': zero_series,
+                'histogram': zero_series
             }
     
     def calculate_bollinger_bands(self, prices, period=20, std_dev=2):
-        """Calculate Bollinger Bands"""
+        """Calculate Bollinger Bands with validation"""
         try:
-            sma = prices.rolling(window=period).mean()
-            std = prices.rolling(window=period).std()
+            if not isinstance(prices, pd.Series):
+                prices = pd.Series(prices)
+                
+            if len(prices) < period:
+                # Not enough data for Bollinger Bands
+                return {
+                    'upper': prices,
+                    'middle': prices,
+                    'lower': prices
+                }
+            
+            # Calculate moving average and standard deviation
+            sma = prices.rolling(window=period, min_periods=period).mean()
+            std = prices.rolling(window=period, min_periods=period).std()
+            
+            # Calculate bands
             upper_band = sma + (std * std_dev)
             lower_band = sma - (std * std_dev)
             
+            # Fill NaN values with price values
+            upper_band = upper_band.fillna(prices)
+            lower_band = lower_band.fillna(prices)
+            sma = sma.fillna(prices)
+            
             return {
-                'upper': upper_band.fillna(prices.mean()),
-                'middle': sma.fillna(prices.mean()),
-                'lower': lower_band.fillna(prices.mean())
+                'upper': upper_band,
+                'middle': sma,
+                'lower': lower_band
             }
-        except:
-            mean_price = prices.mean()
+            
+        except Exception as e:
+            print(f"❌ Error calculating Bollinger Bands: {e}")
+            # Return price series as fallback
             return {
-                'upper': pd.Series([mean_price * 1.02] * len(prices), index=prices.index),
-                'middle': pd.Series([mean_price] * len(prices), index=prices.index),
-                'lower': pd.Series([mean_price * 0.98] * len(prices), index=prices.index)
-            }
-    
-    def calculate_volume_indicators(self, prices, volumes, period=20):
-        """Calculate volume-based indicators"""
-        try:
-            # Volume SMA
-            volume_sma = volumes.rolling(window=period).mean()
-            
-            # On-Balance Volume (OBV)
-            obv = []
-            obv_value = 0
-            for i in range(len(prices)):
-                if i > 0:
-                    if prices.iloc[i] > prices.iloc[i-1]:
-                        obv_value += volumes.iloc[i]
-                    elif prices.iloc[i] < prices.iloc[i-1]:
-                        obv_value -= volumes.iloc[i]
-                obv.append(obv_value)
-            
-            obv_series = pd.Series(obv, index=prices.index)
-            
-            # Volume Rate of Change
-            volume_roc = volumes.pct_change(periods=period) * 100
-            
-            return {
-                'volume_sma': volume_sma.fillna(volumes.mean()),
-                'obv': obv_series,
-                'volume_roc': volume_roc.fillna(0)
-            }
-        except:
-            return {
-                'volume_sma': pd.Series([volumes.mean()] * len(volumes), index=volumes.index),
-                'obv': pd.Series([0] * len(volumes), index=volumes.index),
-                'volume_roc': pd.Series([0] * len(volumes), index=volumes.index)
+                'upper': prices,
+                'middle': prices,
+                'lower': prices
             }
     
-    def detect_support_resistance(self, prices, window=20):
-        """Detect support and resistance levels"""
+    @retry_request(max_retries=3, delay=1, backoff=1.5)
+    def fetch_symbol_data(self, symbol, period="3mo"):
+        """Fetch data for a single symbol with retry logic"""
         try:
-            # Find local minima and maxima
-            highs = prices.rolling(window=window, center=True).max()
-            lows = prices.rolling(window=window, center=True).min()
+            # Validate symbol
+            if not symbol or not isinstance(symbol, str):
+                raise ValueError(f"Invalid symbol: {symbol}")
             
-            # Support levels (local minima)
-            support_levels = []
-            for i in range(len(prices)):
-                if prices.iloc[i] == lows.iloc[i]:
-                    support_levels.append(prices.iloc[i])
+            symbol = symbol.strip().upper()
             
-            # Resistance levels (local maxima)
-            resistance_levels = []
-            for i in range(len(prices)):
-                if prices.iloc[i] == highs.iloc[i]:
-                    resistance_levels.append(prices.iloc[i])
-            
-            # Get most significant levels
-            support_levels = sorted(set(support_levels))[-3:] if support_levels else [prices.min()]
-            resistance_levels = sorted(set(resistance_levels))[-3:] if resistance_levels else [prices.max()]
-            
-            return {
-                'support': support_levels,
-                'resistance': resistance_levels,
-                'current_support': support_levels[-1] if support_levels else prices.min(),
-                'current_resistance': resistance_levels[-1] if resistance_levels else prices.max()
-            }
-        except:
-            return {
-                'support': [prices.min()],
-                'resistance': [prices.max()],
-                'current_support': prices.min(),
-                'current_resistance': prices.max()
-            }
-    
-    def calculate_momentum_indicators(self, prices, period=14):
-        """Calculate momentum indicators"""
-        try:
-            # Rate of Change
-            roc = prices.pct_change(periods=period) * 100
-            
-            # Stochastic Oscillator
-            high_max = prices.rolling(window=period).max()
-            low_min = prices.rolling(window=period).min()
-            stoch_k = ((prices - low_min) / (high_max - low_min)) * 100
-            stoch_d = stoch_k.rolling(window=3).mean()
-            
-            # Williams %R
-            williams_r = ((high_max - prices) / (high_max - low_min)) * -100
-            
-            return {
-                'roc': roc.fillna(0),
-                'stoch_k': stoch_k.fillna(50),
-                'stoch_d': stoch_d.fillna(50),
-                'williams_r': williams_r.fillna(-50)
-            }
-        except:
-            return {
-                'roc': pd.Series([0] * len(prices), index=prices.index),
-                'stoch_k': pd.Series([50] * len(prices), index=prices.index),
-                'stoch_d': pd.Series([50] * len(prices), index=prices.index),
-                'williams_r': pd.Series([-50] * len(prices), index=prices.index)
-            }
-    
-    def analyze_symbol(self, symbol, period="3mo", interval="1h"):
-        """Comprehensive technical analysis for a symbol"""
-        try:
-            # Get historical data
+            # Create ticker and fetch data
             ticker = yf.Ticker(symbol)
-            data = ticker.history(period=period, interval=interval)
+            data = ticker.history(period=period, interval="1d")
             
             if data.empty:
-                return self.get_default_analysis(symbol)
+                print(f"⚠️ No data available for {symbol}")
+                return None
+            
+            # Validate data quality
+            if len(data) < 10:
+                print(f"⚠️ Insufficient data for {symbol}: {len(data)} days")
+                return None
+            
+            # Check for missing or invalid prices
+            if data['Close'].isna().all() or (data['Close'] <= 0).any():
+                print(f"⚠️ Invalid price data for {symbol}")
+                return None
+            
+            return data
+            
+        except Exception as e:
+            print(f"❌ Error fetching data for {symbol}: {e}")
+            raise  # Re-raise to trigger retry
+    
+    def analyze_symbol(self, symbol):
+        """Perform complete technical analysis for a single symbol"""
+        try:
+            # Fetch data
+            data = self.fetch_symbol_data(symbol)
+            if data is None:
+                return {}
             
             prices = data['Close']
-            volumes = data['Volume']
-            highs = data['High']
-            lows = data['Low']
             
-            # Calculate all indicators
+            # Calculate technical indicators
             rsi = self.calculate_rsi(prices)
             macd_data = self.calculate_macd(prices)
             bb_data = self.calculate_bollinger_bands(prices)
-            volume_data = self.calculate_volume_indicators(prices, volumes)
-            sr_levels = self.detect_support_resistance(prices)
-            momentum_data = self.calculate_momentum_indicators(prices)
             
-            # Current values
+            # Get current values
+            current_rsi = rsi.iloc[-1] if len(rsi) > 0 else 50
+            current_macd = macd_data['macd'].iloc[-1] if len(macd_data['macd']) > 0 else 0
+            current_signal = macd_data['signal'].iloc[-1] if len(macd_data['signal']) > 0 else 0
             current_price = prices.iloc[-1]
-            current_rsi = rsi.iloc[-1]
-            current_macd = macd_data['macd'].iloc[-1]
-            current_signal = macd_data['signal'].iloc[-1]
+            bb_upper = bb_data['upper'].iloc[-1]
+            bb_lower = bb_data['lower'].iloc[-1]
+            bb_middle = bb_data['middle'].iloc[-1]
             
             # Generate signals
-            signals = self.generate_technical_signals(
-                current_price, current_rsi, current_macd, current_signal,
-                bb_data, sr_levels, momentum_data
-            )
+            signals = self.generate_signals(current_rsi, current_macd, current_signal, 
+                                          current_price, bb_upper, bb_lower, bb_middle)
             
             return {
-                'symbol': symbol,
-                'current_price': current_price,
                 'rsi': current_rsi,
                 'macd': current_macd,
                 'macd_signal': current_signal,
-                'macd_histogram': macd_data['histogram'].iloc[-1],
-                'bb_upper': bb_data['upper'].iloc[-1],
-                'bb_middle': bb_data['middle'].iloc[-1],
-                'bb_lower': bb_data['lower'].iloc[-1],
-                'support_level': sr_levels['current_support'],
-                'resistance_level': sr_levels['current_resistance'],
-                'volume_sma': volume_data['volume_sma'].iloc[-1],
-                'obv': volume_data['obv'].iloc[-1],
-                'stoch_k': momentum_data['stoch_k'].iloc[-1],
-                'stoch_d': momentum_data['stoch_d'].iloc[-1],
-                'williams_r': momentum_data['williams_r'].iloc[-1],
-                'roc': momentum_data['roc'].iloc[-1],
+                'bb_upper': bb_upper,
+                'bb_middle': bb_middle,
+                'bb_lower': bb_lower,
                 'signals': signals,
-                'analysis_time': datetime.now()
+                'analysis_time': datetime.now().replace(microsecond=0)
             }
             
         except Exception as e:
             print(f"❌ Error analyzing {symbol}: {e}")
-            return self.get_default_analysis(symbol)
+            return {}
     
-    def generate_technical_signals(self, price, rsi, macd, signal, bb_data, sr_levels, momentum_data):
-        """Generate buy/sell signals from technical indicators"""
+    def generate_signals(self, rsi, macd, macd_signal, price, bb_upper, bb_lower, bb_middle):
+        """Generate trading signals based on technical indicators"""
         signals = []
         
-        # RSI signals
-        if rsi < 30:
-            signals.append(('BUY', 'RSI Oversold', 75))
-        elif rsi > 70:
-            signals.append(('SELL', 'RSI Overbought', 75))
-        
-        # MACD signals
-        if macd > signal and macd > 0:
-            signals.append(('BUY', 'MACD Bullish', 70))
-        elif macd < signal and macd < 0:
-            signals.append(('SELL', 'MACD Bearish', 70))
-        
-        # Bollinger Bands signals
-        bb_upper = bb_data['upper'].iloc[-1]
-        bb_lower = bb_data['lower'].iloc[-1]
-        
-        if price <= bb_lower:
-            signals.append(('BUY', 'BB Oversold', 65))
-        elif price >= bb_upper:
-            signals.append(('SELL', 'BB Overbought', 65))
-        
-        # Support/Resistance signals
-        if abs(price - sr_levels['current_support']) / price < 0.02:
-            signals.append(('BUY', 'Near Support', 60))
-        elif abs(price - sr_levels['current_resistance']) / price < 0.02:
-            signals.append(('SELL', 'Near Resistance', 60))
-        
-        # Stochastic signals
-        stoch_k = momentum_data['stoch_k'].iloc[-1]
-        if stoch_k < 20:
-            signals.append(('BUY', 'Stochastic Oversold', 65))
-        elif stoch_k > 80:
-            signals.append(('SELL', 'Stochastic Overbought', 65))
-        
-        return signals
-    
-    def get_default_analysis(self, symbol):
-        """Return default analysis when data is unavailable"""
-        return {
-            'symbol': symbol,
-            'current_price': 0,
-            'rsi': 50,
-            'macd': 0,
-            'macd_signal': 0,
-            'macd_histogram': 0,
-            'bb_upper': 0,
-            'bb_middle': 0,
-            'bb_lower': 0,
-            'support_level': 0,
-            'resistance_level': 0,
-            'volume_sma': 0,
-            'obv': 0,
-            'stoch_k': 50,
-            'stoch_d': 50,
-            'williams_r': -50,
-            'roc': 0,
-            'signals': [],
-            'analysis_time': datetime.now()
-        }
+        try:
+            # RSI signals
+            if rsi < 30:
+                signals.append(('BUY', 'RSI Oversold', 70))
+            elif rsi > 70:
+                signals.append(('SELL', 'RSI Overbought', 70))
+            
+            # MACD signals
+            if macd > macd_signal:
+                signals.append(('BUY', 'MACD Bullish Crossover', 65))
+            elif macd < macd_signal:
+                signals.append(('SELL', 'MACD Bearish Crossover', 65))
+            
+            # Bollinger Bands signals
+            if price <= bb_lower:
+                signals.append(('BUY', 'Price at Lower Bollinger Band', 60))
+            elif price >= bb_upper:
+                signals.append(('SELL', 'Price at Upper Bollinger Band', 60))
+            
+            return signals
+            
+        except Exception as e:
+            print(f"❌ Error generating signals: {e}")
+            return []
     
     def analyze_all_symbols(self):
         """Analyze all configured symbols"""
-        print("🔍 Starting comprehensive technical analysis...")
-        
-        all_symbols = (self.config.STOCK_SYMBOLS + 
-                      self.config.CRYPTO_SYMBOLS + 
-                      self.config.FOREX_SYMBOLS)
-        
-        results = {}
-        
-        for i, symbol in enumerate(all_symbols):
-            print(f"📊 Analyzing {symbol} ({i+1}/{len(all_symbols)})")
-            results[symbol] = self.analyze_symbol(symbol)
-        
-        print("✅ Technical analysis complete!")
-        return results
+        try:
+            all_symbols = (self.config.STOCK_SYMBOLS + 
+                          self.config.CRYPTO_SYMBOLS + 
+                          self.config.FOREX_SYMBOLS)
+            
+            results = {}
+            
+            for symbol in all_symbols:
+                try:
+                    analysis = self.analyze_symbol(symbol)
+                    if analysis:  # Only add if analysis was successful
+                        results[symbol] = analysis
+                    
+                    # Add small delay to avoid overwhelming APIs
+                    time.sleep(0.1)
+                    
+                except Exception as e:
+                    print(f"⚠️ Skipping {symbol} due to error: {e}")
+                    continue
+            
+            print(f"✅ Technical analysis completed for {len(results)} symbols")
+            return results
+            
+        except Exception as e:
+            print(f"❌ Error in bulk analysis: {e}")
+            return {}
 
+# Test the analyzer
 if __name__ == "__main__":
-    # Test the technical analyzer
     analyzer = TechnicalAnalyzer()
     
-    # Test single symbol
-    print("Testing AAPL analysis...")
-    aapl_analysis = analyzer.analyze_symbol('AAPL')
+    # Test single symbol analysis
+    test_symbol = 'AAPL'
+    print(f"Testing technical analysis for {test_symbol}...")
     
-    print(f"AAPL RSI: {aapl_analysis['rsi']:.2f}")
-    print(f"AAPL MACD: {aapl_analysis['macd']:.4f}")
-    print(f"AAPL Signals: {aapl_analysis['signals']}")
+    result = analyzer.analyze_symbol(test_symbol)
+    if result:
+        print(f"✅ Analysis successful for {test_symbol}")
+        print(f"RSI: {result.get('rsi', 'N/A'):.2f}")
+        print(f"MACD: {result.get('macd', 'N/A'):.4f}")
+        print(f"Signals: {len(result.get('signals', []))}")
+    else:
+        print(f"❌ Analysis failed for {test_symbol}")

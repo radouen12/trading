@@ -62,20 +62,24 @@ def setup_directories():
     print("✅ Directory structure ready")
 
 def run_dashboard():
-    """Launch the Enhanced Streamlit dashboard"""
-    dashboard_path = current_dir / "ui" / "enhanced_dashboard.py"
+    """Launch the Phase 3 Enhanced Streamlit dashboard"""
+    dashboard_path = current_dir / "ui" / "phase3_dashboard.py"
     
     if not dashboard_path.exists():
-        print("❌ Enhanced dashboard file not found!")
+        print("❌ Phase 3 dashboard file not found!")
         return False
     
-    print("🚀 Launching Enhanced Real-Time Trading Dashboard...")
-    print("🧠 Phase 2 Features: Technical Analysis + Seasonal Intelligence + News Sentiment + Correlation Analysis")
+    print("🚀 Launching Phase 3 Complete Trading Dashboard...")
+    print("🧪 Backtesting Engine: Strategy testing & performance analytics")
+    print("📊 Performance Metrics: Sharpe ratio, drawdown, VaR analysis")
+    print("🔔 Alert System: Email notifications for signals & risk events")
+    print("🎯 Portfolio Optimization: Modern portfolio theory implementation")
+    print("📈 Advanced Analytics: 15+ professional-grade metrics")
+    print("🧠 Phase 2 Features: Technical + Seasonal + Sentiment + Correlation")
     print("📡 Dashboard will open in your browser")
     print("🔄 Data updates every 60 seconds")
     print("⚡ Analysis runs every 10 minutes")
-    print("🎯 Enhanced AI-powered suggestions")
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     
     try:
         # Launch Streamlit
@@ -91,21 +95,65 @@ def run_dashboard():
         print(f"❌ Error launching dashboard: {e}")
 
 def main():
-    """Main application launcher"""
-    print("🚀 Real-Time Trading System - Phase 2 COMPLETE")
-    print("="*50)
+    """Main application launcher with health check"""
+    print("🚀 AI Trading System - Phase 3 COMPLETE")
+    print("="*60)
+    
+    # Run health check first
+    print("🔍 Running system health check...")
+    try:
+        from utils.health_check import SystemHealthCheck
+        health_check = SystemHealthCheck()
+        system_ready = health_check.run_full_check()
+        
+        if not system_ready:
+            print("\n❌ System is not ready for operation.")
+            health_check.get_fix_suggestions()
+            input("\nPress Enter to continue anyway (not recommended) or Ctrl+C to exit...")
+    except Exception as e:
+        print(f"⚠️ Health check failed: {e}")
+        print("Continuing without health check...")
     
     # Check system requirements
     if not check_dependencies():
         return
     
-    # Setup project structure
+    # Setup project structure with improved error handling
     setup_directories()
     
-    # Display startup information
+    # Initialize configuration directories
+    try:
+        from config import Config
+        config = Config()
+        dir_info = config.initialize_directories()
+        
+        print(f"✅ Directory setup complete:")
+        print(f"   Data: {dir_info['data_directory']}")
+        print(f"   Logs: {dir_info['logs_directory']}")
+        print(f"   Database: {dir_info['db_path']}")
+        
+    except Exception as e:
+        print(f"❌ Error initializing directories: {e}")
+        print("Continuing with default configuration...")
+    
+    # Display startup information with comprehensive configuration check
     print("\n📊 System Configuration:")
     from config import Config
     config = Config()
+    
+    # Check API configuration
+    api_issues = config.validate_api_keys()
+    if api_issues:
+        print("\n⚠️  Configuration Issues:")
+        for issue in api_issues:
+            print(f"   - {issue}")
+        print("\n💡 To enable full functionality:")
+        print("   1. Copy .env.template to .env")
+        print("   2. Add your API keys to the .env file")
+        print("   3. Restart the application")
+        print("\n🚀 System will continue with available features...")
+    else:
+        print("✅ All API keys configured properly")
     
     print(f"💰 Total Capital: ${config.TOTAL_CAPITAL:,}")
     print(f"📈 Max Position: {config.MAX_POSITION_SIZE*100:.1f}%")
@@ -115,7 +163,14 @@ def main():
     print(f"   - {len(config.CRYPTO_SYMBOLS)} Crypto pairs")
     print(f"   - {len(config.FOREX_SYMBOLS)} Forex pairs")
     
-    print("\n⚡ Phase 2 Features (COMPLETED):")
+    print("\n⚡ Phase 3 Features (COMPLETED):")
+    print("✅ Advanced Backtesting Engine - Strategy testing & validation")
+    print("✅ Performance Analytics Suite - 15+ professional metrics")
+    print("✅ Email Alert System - Real-time notifications")
+    print("✅ Portfolio Optimization - Modern portfolio theory")
+    print("✅ Risk Management Tools - VaR, Sharpe, drawdown analysis")
+    print("✅ Enhanced Dashboard - 6-tab professional interface")
+    print("\n⚡ Phase 2 Features (INTEGRATED):")
     print("✅ Advanced Technical Analysis (RSI, MACD, Bollinger Bands)")
     print("✅ Seasonal Pattern Intelligence")
     print("✅ News Sentiment Analysis")
@@ -134,14 +189,16 @@ def main():
     print("✅ Portfolio correlation tracking")
     print("🔄 Auto-refreshing enhanced dashboard")
     
-    print("\n🔮 Coming in Phase 3:")
-    print("🔜 Backtesting engine")
-    print("🔜 Performance analytics")
-    print("🔜 Alert systems (Email/SMS)")
-    print("🔜 Advanced risk metrics")
+    print("\n🔮 Future Enhancements (Phase 4):")
+    print("🔜 Machine Learning Integration")
+    print("🔜 Options Trading Support")
+    print("🔜 Real-Time Paper Trading")
+    print("🔜 Multi-Account Management")
+    print("🔜 Mobile Application")
+    print("🔜 Cloud Deployment")
     
-    # Launch enhanced dashboard
-    input("\n📡 Press Enter to launch ENHANCED dashboard...")
+    # Launch Phase 3 dashboard
+    input("\n📡 Press Enter to launch PHASE 3 COMPLETE dashboard...")
     run_dashboard()
 
 if __name__ == "__main__":

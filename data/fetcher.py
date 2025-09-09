@@ -7,11 +7,109 @@ import time
 import sqlite3
 from config import Config
 import logging
+from functools import wraps
+import random
+from threading import Lock
 
 class DataFetcher:
     def __init__(self):
         self.config = Config()
         self.setup_database()
+        
+        # Apply rate limiting to fetch methods
+        self.fetch_real_time_stocks = self._rate_limit_decorator(self._fetch_real_time_stocks_impl)
+        self.fetch_real_time_crypto = self._rate_limit_decorator(self._fetch_real_time_crypto_impl)
+        self.fetch_real_time_forex = self._rate_limit_decorator(self._fetch_real_time_forex_impl)
+        
+        # Rate limiting
+        self._last_request_time = 0
+        self._request_count = 0
+        self._request_lock = Lock()
+        self._min_delay = 0.2  # Minimum 200ms between requests
+        self._max_requests_per_minute = 50  # Conservative limit
+        self._request_times = []  # Track request timestamps
+        
+        # Error tracking
+        self._consecutive_errors = 0
+        self._max_consecutive_errors = 5
+        self._error_backoff = 1.0  # Initial backoff delay
+        
+        # Setup logging
+        self._setup_logging()
+    
+    def _setup_logging(self):
+        """Setup logging for the data fetcher"""
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(getattr(logging, self.config.LOG_LEVEL))
+        
+        if not self.logger.handlers:
+            # Console handler
+            console_handler = logging.StreamHandler()
+            console_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            console_handler.setFormatter(console_formatter)
+            self.logger.addHandler(console_handler)
+    
+    def _rate_limit_decorator(self, func):
+        """Decorator to add rate limiting to API calls"""
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with self._request_lock:
+                current_time = time.time()
+                
+                # Remove old request times (older than 1 minute)
+                self._request_times = [
+                    t for t in self._request_times 
+                    if current_time - t < 60
+                ]
+                
+                # Check if we're within rate limits
+                if len(self._request_times) >= self._max_requests_per_minute:
+                    sleep_time = 60 - (current_time - self._request_times[0])
+                    if sleep_time > 0:
+                        self.logger.warning(f"Rate limit reached, sleeping for {sleep_time:.1f}s")
+                        time.sleep(sleep_time)
+                
+                # Ensure minimum delay between requests
+                time_since_last = current_time - self._last_request_time
+                if time_since_last < self._min_delay:
+                    sleep_time = self._min_delay - time_since_last
+                    time.sleep(sleep_time)
+                
+                # Add random jitter to avoid synchronized requests
+                jitter = random.uniform(0.05, 0.15)
+                time.sleep(jitter)
+                
+                # Record request time
+                request_time = time.time()
+                self._request_times.append(request_time)
+                self._last_request_time = request_time
+                
+                try:
+                    result = func(*args, **kwargs)
+                    self._consecutive_errors = 0  # Reset error count on success
+                    self._error_backoff = 1.0    # Reset backoff
+                    return result
+                    
+                except Exception as e:
+                    self._consecutive_errors += 1
+                    self.logger.error(f"API call failed: {e}")
+                    
+                    # Exponential backoff for consecutive errors
+                    if self._consecutive_errors >= 3:
+                        self._error_backoff = min(self._error_backoff * 2, 30)
+                        self.logger.warning(f"Applying backoff: {self._error_backoff}s")
+                        time.sleep(self._error_backoff)
+                    
+                    # Stop making requests if too many consecutive errors
+                    if self._consecutive_errors >= self._max_consecutive_errors:
+                        self.logger.error("Too many consecutive errors, stopping requests")
+                        raise Exception("API rate limit exceeded or service unavailable")
+                    
+                    raise e
+        
+        return wrapper
         
     def setup_database(self):
         """Initialize SQLite database for storing price data"""
@@ -57,8 +155,8 @@ class DataFetcher:
         except Exception as e:
             print(f"❌ Database setup error: {e}")
     
-    def fetch_real_time_stocks(self):
-        """Fetch real-time stock data"""
+    def _fetch_real_time_stocks_impl(self):
+        """Implementation of real-time stock data fetching with improved error handling"""
         try:
             all_symbols = self.config.STOCK_SYMBOLS
             tickers = yf.Tickers(' '.join(all_symbols))
@@ -83,8 +181,7 @@ class DataFetcher:
                             'asset_type': 'stock'
                         }
                     
-                    # Small delay to avoid rate limiting
-                    time.sleep(0.1)
+                    # Rate limiting handled by decorator
                     
                 except Exception as e:
                     print(f"⚠️  Error fetching {symbol}: {e}")
@@ -96,8 +193,8 @@ class DataFetcher:
             print(f"❌ Error fetching stock data: {e}")
             return {}
     
-    def fetch_real_time_crypto(self):
-        """Fetch real-time crypto data"""
+    def _fetch_real_time_crypto_impl(self):
+        """Implementation of real-time crypto data fetching with improved error handling"""
         try:
             crypto_data = {}
             for symbol in self.config.CRYPTO_SYMBOLS:
@@ -118,7 +215,7 @@ class DataFetcher:
                             'timestamp': datetime.now(),
                             'asset_type': 'crypto'
                         }
-                    time.sleep(0.1)
+                    # Rate limiting handled by decorator
                 except Exception as e:
                     print(f"⚠️  Error fetching crypto {symbol}: {e}")
                     continue
@@ -129,8 +226,8 @@ class DataFetcher:
             print(f"❌ Error fetching crypto data: {e}")
             return {}
     
-    def fetch_real_time_forex(self):
-        """Fetch real-time forex data"""
+    def _fetch_real_time_forex_impl(self):
+        """Implementation of real-time forex data fetching with improved error handling"""
         try:
             forex_data = {}
             for symbol in self.config.FOREX_SYMBOLS:
@@ -151,7 +248,7 @@ class DataFetcher:
                             'timestamp': datetime.now(),
                             'asset_type': 'forex'
                         }
-                    time.sleep(0.1)
+                        # Rate limiting handled by decorator
                 except Exception as e:
                     print(f"⚠️  Error fetching forex {symbol}: {e}")
                     continue
