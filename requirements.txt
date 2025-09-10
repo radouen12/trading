@@ -1,7 +1,7 @@
-# Core Dependencies - Stable Versions
-streamlit>=1.28.0,<1.50.0
-pandas>=2.0.0,<2.2.0
-numpy>=1.24.0,<1.26.0
+# Core Dependencies - Working Versions
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
 plotly>=5.15.0
 yfinance>=0.2.18
 requests>=2.31.0
@@ -17,14 +17,10 @@ textblob>=0.17.0
 # Development Dependencies
 python-dateutil>=2.8.0
 pytz>=2023.3
-tqdm>=4.65.0
 
 # Environment Variables Support
 python-dotenv>=1.0.0
 
-# Optional Dependencies (for enhanced features)
+# Web scraping
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
-
-# Email Support
-secure-smtplib>=0.1.1

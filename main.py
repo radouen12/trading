@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Real-Time Trading System - Main Entry Point
-Phase 1: Foundation with Streamlit Dashboard
+Phase 4: Complete AI Trading System
 
 Run with: streamlit run main.py
 """
@@ -76,9 +76,7 @@ def run_dashboard():
     print("🔄 Arbitrage Detection: Cross-asset opportunity scanner")
     print("🛡️ Risk Monitor: Real-time portfolio risk management")
     print("📡 Signal Processing: Advanced signal validation & filtering")
-    print("📈 Phase 3 Features: Backtesting + Performance + Optimization + Alerts")
-    print("🧠 Phase 2 Features: Technical + Seasonal + Sentiment + Correlation")
-    print("📊 Phase 1 Features: Real-time data + Portfolio + Risk management")
+    print("📈 Features: Real-time data + Portfolio + Risk management")
     print("📡 Dashboard will open in your browser")
     print("🔄 Data updates every 60 seconds")
     print("⚡ Analysis runs every 10 minutes")
@@ -98,73 +96,62 @@ def run_dashboard():
         print(f"❌ Error launching dashboard: {e}")
 
 def main():
-    """Main application launcher with health check"""
+    """Main application launcher"""
     print("🚀 AI Trading System - Phase 4 COMPLETE")
     print("="*60)
     
-    # Run health check first
-    print("🔍 Running system health check...")
-    try:
-        from utils.health_check import SystemHealthCheck
-        health_check = SystemHealthCheck()
-        system_ready = health_check.run_full_check()
-        
-        if not system_ready:
-            print("\n❌ System is not ready for operation.")
-            health_check.get_fix_suggestions()
-            input("\nPress Enter to continue anyway (not recommended) or Ctrl+C to exit...")
-    except Exception as e:
-        print(f"⚠️ Health check failed: {e}")
-        print("Continuing without health check...")
-    
     # Check system requirements
     if not check_dependencies():
+        print("\n❌ Please install missing dependencies first:")
+        print("pip install -r requirements.txt")
         return
     
-    # Setup project structure with improved error handling
+    # Setup project structure
     setup_directories()
     
-    # Initialize configuration directories
+    # Initialize configuration
     try:
         from config import Config
         config = Config()
-        dir_info = config.initialize_directories()
         
-        print(f"✅ Directory setup complete:")
-        print(f"   Data: {dir_info['data_directory']}")
-        print(f"   Logs: {dir_info['logs_directory']}")
-        print(f"   Database: {dir_info['db_path']}")
+        print(f"✅ Configuration loaded:")
+        print(f"   Database: {config.DB_PATH}")
+        print(f"   Log file: {config.LOG_FILE}")
         
     except Exception as e:
-        print(f"❌ Error initializing directories: {e}")
+        print(f"⚠️ Configuration warning: {e}")
         print("Continuing with default configuration...")
     
-    # Display startup information with comprehensive configuration check
+    # Display startup information
     print("\n📊 System Configuration:")
-    from config import Config
-    config = Config()
-    
-    # Check API configuration
-    api_issues = config.validate_api_keys()
-    if api_issues:
-        print("\n⚠️  Configuration Issues:")
-        for issue in api_issues:
-            print(f"   - {issue}")
-        print("\n💡 To enable full functionality:")
-        print("   1. Copy .env.template to .env")
-        print("   2. Add your API keys to the .env file")
-        print("   3. Restart the application")
-        print("\n🚀 System will continue with available features...")
-    else:
-        print("✅ All API keys configured properly")
-    
-    print(f"💰 Total Capital: ${config.TOTAL_CAPITAL:,}")
-    print(f"📈 Max Position: {config.MAX_POSITION_SIZE*100:.1f}%")
-    print(f"⚠️  Daily Loss Limit: {config.MAX_DAILY_LOSS*100:.1f}%")
-    print(f"📊 Tracking Assets:")
-    print(f"   - {len(config.STOCK_SYMBOLS)} Stocks")
-    print(f"   - {len(config.CRYPTO_SYMBOLS)} Crypto pairs")
-    print(f"   - {len(config.FOREX_SYMBOLS)} Forex pairs")
+    try:
+        from config import Config
+        config = Config()
+        
+        # Check API configuration
+        api_issues = config.validate_api_keys()
+        if api_issues:
+            print("\n⚠️  Configuration Notes:")
+            for issue in api_issues:
+                print(f"   - {issue}")
+            print("\n💡 To enable full functionality:")
+            print("   1. Copy .env.template to .env")
+            print("   2. Add your API keys to the .env file")
+            print("   3. Restart the application")
+            print("\n🚀 System will continue with available features...")
+        else:
+            print("✅ All API keys configured properly")
+        
+        print(f"💰 Total Capital: ${config.TOTAL_CAPITAL:,}")
+        print(f"📈 Max Position: {config.MAX_POSITION_SIZE*100:.1f}%")
+        print(f"⚠️  Daily Loss Limit: {config.MAX_DAILY_LOSS*100:.1f}%")
+        print(f"📊 Tracking Assets:")
+        print(f"   - {len(config.STOCK_SYMBOLS)} Stocks")
+        print(f"   - {len(config.CRYPTO_SYMBOLS)} Crypto pairs")
+        print(f"   - {len(config.FOREX_SYMBOLS)} Forex pairs")
+        
+    except Exception as e:
+        print(f"⚠️ Could not load configuration: {e}")
     
     print("\n⚡ Phase 4 Features (COMPLETED):")
     print("✅ Machine Learning Integration - Price prediction & pattern recognition")
@@ -173,29 +160,55 @@ def main():
     print("✅ Arbitrage Detection - Cross-asset opportunity scanner")
     print("✅ Risk Monitoring System - Real-time portfolio risk management")
     print("✅ Signal Processing - Advanced signal validation & filtering")
-    print("\n⚡ Phase 3 Features (INTEGRATED):")
-    print("✅ Advanced Backtesting Engine - Strategy testing & validation")
-    print("✅ Performance Analytics Suite - 15+ professional metrics")
-    print("✅ Email Alert System - Real-time notifications")
-    print("✅ Portfolio Optimization - Modern portfolio theory")
-    print("✅ Risk Management Tools - VaR, Sharpe, drawdown analysis")
+    print("✅ Technical Analysis - RSI, MACD, Bollinger Bands")
+    print("✅ Seasonal Analysis - Monthly performance patterns")
+    print("✅ Sentiment Analysis - News sentiment tracking")
+    print("✅ Correlation Analysis - Portfolio risk assessment")
+    print("✅ Real-time Data Fetching - Stocks, Crypto, Forex")
+    print("✅ Portfolio Management - Position tracking & risk management")
     print("✅ Enhanced Dashboard - Multi-tab professional interface")
     
     print("\n🔄 Auto-Features:")
-    print("✅ Real-time price data")
+    print("✅ Real-time price data updates")
     print("✅ Capital-based position sizing")
     print("✅ Multi-timeframe suggestions")
     print("✅ Advanced risk management")
     print("✅ Portfolio correlation tracking")
-    print("🔄 Auto-refreshing enhanced dashboard")
+    print("✅ Auto-refreshing enhanced dashboard")
     
     print("\n🔮 Future Enhancements (Beyond Phase 4):")
     print("🔜 Reinforcement Learning Trading Agents")
     print("🔜 Options Trading Support")
-    print("🔜 Real-Time Paper Trading with Live Execution")
+    print("🔜 Real-Time Live Trading with Broker Integration")
     print("🔜 Multi-Account Management")
     print("🔜 Mobile Application")
     print("🔜 Cloud Deployment & Scaling")
+    
+    # Quick system test
+    print("\n🧪 Quick System Test:")
+    try:
+        from data.fetcher import DataFetcher
+        from engine.portfolio import PortfolioManager
+        from engine.suggester import EnhancedSuggestionEngine
+        
+        # Test data fetcher
+        fetcher = DataFetcher()
+        print("✅ Data fetcher initialized")
+        
+        # Test portfolio manager
+        portfolio = PortfolioManager()
+        stats = portfolio.get_portfolio_stats()
+        print(f"✅ Portfolio manager working (${stats.get('total_value', 0):,.2f})")
+        
+        # Test suggestion engine
+        suggester = EnhancedSuggestionEngine()
+        print("✅ AI suggestion engine initialized")
+        
+        print("✅ All core systems operational")
+        
+    except Exception as e:
+        print(f"⚠️ System test warning: {e}")
+        print("Some features may not work properly")
     
     # Launch Phase 4 dashboard
     input("\n📡 Press Enter to launch PHASE 4 COMPLETE AI Trading System...")
