@@ -11,6 +11,9 @@ try:
 except:
     print("⚠️ python-dotenv not installed or .env file not found")
 
+# Get project root directory at module level
+PROJECT_ROOT = Path(__file__).parent
+
 class Config:
     # Capital Management
     TOTAL_CAPITAL = 10000  # Change this to your actual capital
@@ -72,25 +75,27 @@ class Config:
     REAL_TIME_INTERVAL = 60  # seconds
     ANALYSIS_INTERVAL = 600  # 10 minutes
     
-    # Database and Logging - Simplified paths
+    # Database and Logging - Fixed paths using module-level PROJECT_ROOT
+    DB_PATH = str(PROJECT_ROOT / "data" / "trading_data.db")
+    LOG_FILE = str(PROJECT_ROOT / "logs" / "trading.log")
+    LOG_LEVEL = "INFO"
+    
     @classmethod
     def get_project_root(cls):
         """Get project root directory"""
-        return Path(__file__).parent
+        return PROJECT_ROOT
     
     @classmethod
     def initialize_directories(cls):
         """Initialize required directories"""
-        project_root = cls.get_project_root()
-        
         # Create directories
-        data_dir = project_root / "data"
-        logs_dir = project_root / "logs"
+        data_dir = PROJECT_ROOT / "data"
+        logs_dir = PROJECT_ROOT / "logs"
         
         data_dir.mkdir(exist_ok=True)
         logs_dir.mkdir(exist_ok=True)
         
-        # Set paths
+        # Update class paths
         cls.DB_PATH = str(data_dir / "trading_data.db")
         cls.LOG_FILE = str(logs_dir / "trading.log")
         
@@ -102,11 +107,6 @@ class Config:
             'db_path': cls.DB_PATH,
             'log_file': cls.LOG_FILE
         }
-    
-    # Initialize paths on import
-    DB_PATH = str(get_project_root() / "data" / "trading_data.db")
-    LOG_FILE = str(get_project_root() / "logs" / "trading.log")
-    LOG_LEVEL = "INFO"
     
     # Trading Hours
     MARKET_OPEN = "09:30"
